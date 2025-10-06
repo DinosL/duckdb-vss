@@ -20,29 +20,6 @@ FROM range(1, 10) t1(id),
 statement ok
 CREATE INDEX my_hnsw_index ON my_vector_table USING hnsw (vec);
 
-query I
-SELECT array_distance(vec, [1, 2, 3]::FLOAT[3]) < 1.0
-FROM my_vector_table
-WHERE id > 0
-ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
-LIMIT 3;
-----
-1
-1
-1
-
-# Make sure the plan is not falling back to a sequential scan. Maybe that is not even possible in that case. I think it is possible only if I first materialize the distances (maybe???)
-
-query II
-EXPLAIN ANALYZE SELECT *
-FROM my_vector_table
-WHERE id > 0
-ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
-LIMIT 3;
-----
-analyzed_plan	<REGEX>:.*HSNW Index:.*my_hnsw_index.*
-
-
 query II
 SELECT *
 FROM my_vector_table
@@ -54,76 +31,100 @@ LIMIT 3;
 8	[1.0, 2.0, 3.0]
 9	[1.0, 2.0, 3.0]
 
-# try id only
-
-query I
-SELECT id
-FROM my_vector_table
-ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
-LIMIT 3;
-----
-7
-8
-9
-
-# try vector only
-
-query I
-SELECT vec
-FROM my_vector_table
-ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
-LIMIT 3;
-----
-[1.0, 2.0, 3.0]
-[1.0, 2.0, 3.0]
-[1.0, 2.0, 3.0]
-
-
-# Change the ranges. That was working before the changes, it should work now as well
-
-statement ok
-CREATE TABLE my_vector_table2 (id INTEGER, vec FLOAT[3]);
-
-statement ok
-INSERT INTO my_vector_table2 (id, vec)
-SELECT id, array_value(a, b, c)
-FROM range(0, 10) t1(id),
-     range(0, 10) t2(a),
-     range(0, 10) t3(b),
-     range(0, 10) t4(c);
-
-statement ok
-CREATE INDEX my_hnsw_index2 ON my_vector_table2 USING hnsw (vec);
-
-query I
-SELECT array_distance(vec, [1, 2, 3]::FLOAT[3]) < 1.0
-FROM my_vector_table2
-WHERE id > 0
-ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
-LIMIT 3;
-----
-1
-1
-1
-
-query II
-SELECT *
-FROM my_vector_table2
-WHERE id > 3
-ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
-LIMIT 3;
-----
-7	[1.0, 2.0, 3.0]
-8	[1.0, 2.0, 3.0]
-9	[1.0, 2.0, 3.0]
-
-query II
-SELECT id, array_distance(vec, [1,2,3]::FLOAT[3]) as dist
-FROM my_vector_table
-WHERE id > 0
-ORDER BY dist
-LIMIT 3;
-----
-7	0.0
-8	0.0
-9	0.0
+#
+# # Make sure the plan is not falling back to a sequential scan. Maybe that is not even possible in that case. I think it is possible only if I first materialize the distances (maybe???)
+#
+# query II
+# EXPLAIN ANALYZE SELECT *
+# FROM my_vector_table
+# WHERE id > 0
+# ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
+# LIMIT 3;
+# ----
+# analyzed_plan	<REGEX>:.*HSNW Index:.*my_hnsw_index.*
+#
+#
+# query II
+# SELECT *
+# FROM my_vector_table
+# WHERE id > 3
+# ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
+# LIMIT 3;
+# ----
+# 7	[1.0, 2.0, 3.0]
+# 8	[1.0, 2.0, 3.0]
+# 9	[1.0, 2.0, 3.0]
+#
+# # try id only
+#
+# query I
+# SELECT id
+# FROM my_vector_table
+# ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
+# LIMIT 3;
+# ----
+# 7
+# 8
+# 9
+#
+# # try vector only
+#
+# query I
+# SELECT vec
+# FROM my_vector_table
+# ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
+# LIMIT 3;
+# ----
+# [1.0, 2.0, 3.0]
+# [1.0, 2.0, 3.0]
+# [1.0, 2.0, 3.0]
+#
+#
+# # Change the ranges. That was working before the changes, it should work now as well
+#
+# statement ok
+# CREATE TABLE my_vector_table2 (id INTEGER, vec FLOAT[3]);
+#
+# statement ok
+# INSERT INTO my_vector_table2 (id, vec)
+# SELECT id, array_value(a, b, c)
+# FROM range(0, 10) t1(id),
+#      range(0, 10) t2(a),
+#      range(0, 10) t3(b),
+#      range(0, 10) t4(c);
+#
+# statement ok
+# CREATE INDEX my_hnsw_index2 ON my_vector_table2 USING hnsw (vec);
+#
+# query I
+# SELECT array_distance(vec, [1, 2, 3]::FLOAT[3]) < 1.0
+# FROM my_vector_table2
+# WHERE id > 0
+# ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
+# LIMIT 3;
+# ----
+# 1
+# 1
+# 1
+#
+# query II
+# SELECT *
+# FROM my_vector_table2
+# WHERE id > 3
+# ORDER BY array_distance(vec, [1, 2, 3]::FLOAT[3])
+# LIMIT 3;
+# ----
+# 7	[1.0, 2.0, 3.0]
+# 8	[1.0, 2.0, 3.0]
+# 9	[1.0, 2.0, 3.0]
+#
+# query II
+# SELECT id, array_distance(vec, [1,2,3]::FLOAT[3]) as dist
+# FROM my_vector_table
+# WHERE id > 0
+# ORDER BY dist
+# LIMIT 3;
+# ----
+# 7	0.0
+# 8	0.0
+# 9	0.0

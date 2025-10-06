@@ -300,7 +300,12 @@ unique_ptr<IndexScanState> HNSWIndex::InitializeScan(float *query_vector, idx_t 
 
 	// Acquire a shared lock to search the index
 	auto lock = rwlock.GetSharedLock();
-	auto search_result = index.ef_search(query_vector, limit, ef_search);
+	idx_t filter_id = 0;
+	auto search_result = index.filtered_search(query_vector, limit, [filter_id](int64_t row_idx) {
+		// return row_idx == filter_id;
+			return true;
+	});
+	// auto search_result = index.ef_search(query_vector, limit, ef_search);
 
 	state->current_row = 0;
 	state->total_rows = search_result.size();
@@ -312,6 +317,16 @@ unique_ptr<IndexScanState> HNSWIndex::InitializeScan(float *query_vector, idx_t 
 
 idx_t HNSWIndex::Scan(IndexScanState &state, Vector &result, idx_t result_offset) {
 	auto &scan_state = state.Cast<HNSWIndexScanState>();
+
+
+	// ExpressionExecutor executor(context);
+	// for (auto &filter : filters) {
+	// 	executor.AddExpression(filter.GetExpression(index_scan_col_idx));
+	// }
+	// DataChunk scan_chunk;
+	// auto search_result = index.filtered_search(query_vector, limit, ef_search, [&](int64_t row_idx) {
+	// 	table_data.FetchByRow(row_idx, scan_state);
+	// });
 
 	idx_t count = 0;
 	auto row_ids = FlatVector::GetData<row_t>(result) + result_offset;
